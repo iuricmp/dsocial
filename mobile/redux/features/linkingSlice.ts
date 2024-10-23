@@ -7,6 +7,8 @@ interface CounterState {
   clientName?: string;
   reason?: string;
   bech32Address?: string;
+  /* The keyinfo of the selected account 'bech32Address' */
+  keyinfo?: KeyInfo;
   txInput?: string;
   /* The callback URL to return to after each operation */
   callback?: string;
@@ -66,20 +68,60 @@ export const signTx = createAsyncThunk<SignTxResponse, { keyInfo: KeyInfo }, Thu
   return signedTx
 });
 
+interface SetLinkResponse {
+  reason?: string;
+  clientName?: string;
+  bech32Address?: string;
+  txInput?: string;
+  callback?: string;
+  path: string;
+  keyinfo?: KeyInfo;
+}
+
+export const setLinkingData = createAsyncThunk<SetLinkResponse, Linking.ParsedURL, ThunkExtra>("linking/setLinkingData", async (parsedURL, thunkAPI) => {
+
+  const queryParams = parsedURL.queryParams
+  const gnonative = thunkAPI.extra.gnonative as GnoNativeApi;
+
+  const bech32Address = queryParams?.address ? queryParams.address as string : undefined;
+  let keyinfo: KeyInfo | undefined;
+
+  if (bech32Address) {
+    const keyinfos = await gnonative.listKeyInfo();
+    for (const k of keyinfos) {
+      const kAddress = await gnonative.addressToBech32(k.address);
+      if (kAddress === bech32Address) {
+        keyinfo = k;
+        break;
+      }
+    }
+  }
+
+  return {
+    reason: queryParams?.reason ? queryParams.reason as string : undefined,
+    clientName: queryParams?.client_name ? queryParams.client_name as string : undefined,
+    bech32Address,
+    txInput: queryParams?.tx ? queryParams.tx as string : undefined,
+    callback: queryParams?.callback ? decodeURIComponent(queryParams.callback as string) : undefined,
+    path: queryParams?.path as string,
+    keyinfo
+  }
+});
+
 export const linkingSlice = createSlice({
   name: "linking",
   initialState,
-  reducers: {
-    setLinkingData: (state, action: PayloadAction<Linking.ParsedURL>) => {
-      const queryParams = action.payload.queryParams
-
-      state.reason = queryParams?.reason ? queryParams.reason as string : undefined
-      state.clientName = queryParams?.client_name ? queryParams.client_name as string : undefined
-      state.bech32Address = queryParams?.address ? queryParams.address as string : undefined
-      state.txInput = queryParams?.tx ? queryParams.tx as string : undefined
-      state.callback = queryParams?.callback ? decodeURIComponent(queryParams.callback as string) : undefined
-      state.path = queryParams?.path as string
-    },
+  reducers: {},
+  extraReducers: (builder) => {
+    builder.addCase(setLinkingData.fulfilled, (state, action) => {
+      state.reason = action.payload.reason;
+      state.clientName = action.payload.clientName;
+      state.bech32Address = action.payload.bech32Address;
+      state.txInput = action.payload.txInput;
+      state.callback = action.payload.callback;
+      state.path = action.payload.path;
+      state.keyinfo = action.payload.keyinfo;
+    })
   },
   selectors: {
     selectTxInput: (state) => state.txInput,
@@ -87,10 +129,9 @@ export const linkingSlice = createSlice({
     selectPath: (state) => state.path,
     selectBech32Address: (state) => state.bech32Address,
     selectClientName: (state) => state.clientName,
+    selectKeyInfo: (state) => state.keyinfo,
     reasonSelector: (state) => state.reason,
   },
 });
 
-export const { setLinkingData } = linkingSlice.actions;
-
-export const { selectTxInput, selectCallback, selectPath, selectBech32Address, selectClientName, reasonSelector } = linkingSlice.selectors;
+export const { selectTxInput, selectCallback, selectPath, selectBech32Address, selectClientName, reasonSelector, selectKeyInfo } = linkingSlice.selectors;

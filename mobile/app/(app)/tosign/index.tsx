@@ -1,29 +1,25 @@
 import { Layout } from "@/components";
 import Button from "@/components/button";
-import VaultListItem from "@/components/list/vault-list/VaultListItem";
 import Spacer from "@/components/spacer";
 import Text from "@/components/text";
-import { selectClientName, selectBech32Address, selectTxInput, signTx, useAppDispatch, useAppSelector, reasonSelector, selectCallback } from "@/redux";
-import { KeyInfo, useGnoNativeContext } from "@gnolang/gnonative";
-import { router, useNavigation } from "expo-router";
+import { selectClientName, selectBech32Address, selectTxInput, signTx, useAppDispatch, useAppSelector, reasonSelector, selectCallback, selectKeyInfo } from "@/redux";
+import { useGnoNativeContext } from "@gnolang/gnonative";
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { FlatList } from "react-native";
 import * as Linking from 'expo-linking';
 
 export default function Page() {
-    const [loading, setLoading] = useState<string | undefined>(undefined);
-    const [accounts, setAccounts] = useState<KeyInfo[]>([]);
 
     const dispatch = useAppDispatch();
     const { gnonative } = useGnoNativeContext();
-    const navigation = useNavigation();
     const [accountName, setAccountName] = useState<string | undefined>(undefined);
     const clientName = useAppSelector(selectClientName);
-    
+
     const reason = useAppSelector(reasonSelector);
     const bech32Address = useAppSelector(selectBech32Address);
     const txInput = useAppSelector(selectTxInput);
     const callback = useAppSelector(selectCallback);
+    const keyInfo = useAppSelector(selectKeyInfo);
 
     console.log('txInput', txInput);
     console.log('bech32Address', bech32Address);
@@ -37,28 +33,11 @@ export default function Page() {
         })();
     }, [bech32Address]);
 
-
-    useEffect(() => {
-        const unsubscribe = navigation.addListener("focus", async () => {
-            try {
-                setLoading("Loading accounts...");
-
-                const response = await gnonative.listKeyInfo();
-                setAccounts(response);
-            } catch (error: unknown | Error) {
-                console.error(error);
-            } finally {
-                setLoading(undefined);
-            }
-        });
-        return unsubscribe;
-    }, [navigation]);
-
-    const signTxAndReturnToRequester = async (keyInfo: KeyInfo) => {
+    const signTxAndReturnToRequester = async () => {
         console.log('onChangeAccountHandler', keyInfo);
 
-        if (!txInput) {
-            throw new Error("No transaction input found.");
+        if (!txInput || !keyInfo) {
+            throw new Error("No transaction input or keyInfo found.");
         }
 
         const signedTx = await dispatch(signTx({ keyInfo })).unwrap();
@@ -75,28 +54,19 @@ export default function Page() {
                 <Layout.BodyAlignedBotton>
                     <Text.Title>{clientName} is requiring permission to {reason}.</Text.Title>
                     <Spacer space={16} />
-                    <Text.Body>In the next version of this app you'll get more details about the transaction dSocial is trying to execute.</Text.Body>
 
                     <Spacer space={16} />
                     <Text.Body>reason: {reason}</Text.Body>
                     <Text.Body>callback: {callback}</Text.Body>
                     <Text.Body>client_name: {clientName}</Text.Body>
+                    <Text.Body>accountName: {accountName}</Text.Body>
+                    <Text.Body>Address: <Text.Caption1>{bech32Address}</Text.Caption1></Text.Body>
+                    <Text.Body>Keyinfo: <Text.Caption1>{keyInfo?.name}</Text.Caption1></Text.Body>
 
                     <Spacer space={16} />
-                    <Text.Title>For now, please select a key {accountName} to sign the transaction</Text.Title>
-                    <Spacer space={16} />
 
-                    {accounts && (
-                        <FlatList
-                            data={accounts}
-                            renderItem={({ item }) => (
-                                <VaultListItem vault={item} onVaultPress={signTxAndReturnToRequester} />
-                            )}
-                            keyExtractor={(item) => item.name}
-                            ListEmptyComponent={<Text.Body>There are no items to list.</Text.Body>}
-                        />
-                    )}
-                    <Button.TouchableOpacity title="Cancel" variant="primary" onPress={() => router.push("/home")}></Button.TouchableOpacity>
+                    <Button.TouchableOpacity title="Approve" variant="primary" onPress={signTxAndReturnToRequester}></Button.TouchableOpacity>
+                    <Button.TouchableOpacity title="Cancel" variant="primary-red" onPress={() => router.push("/home")}></Button.TouchableOpacity>
                 </Layout.BodyAlignedBotton>
             </Layout.Container>
         </>
